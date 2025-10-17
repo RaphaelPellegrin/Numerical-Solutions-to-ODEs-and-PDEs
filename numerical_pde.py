@@ -299,10 +299,10 @@ def create_heat_lattice_animation(
     boundary_conditions: Tuple[float, float] = (0.0, 0.0),
     output_filename: str = "heat_lattice_march.gif",
 ) -> None:
-    """Creates animated GIF showing heat equation lattice being built.
+    """Creates animated GIF showing heat equation lattice being built with clear stencil visualization.
 
     Shows the space-time grid with computed points highlighted as we march forward in time.
-    Grey points are uncomputed, blue points are computed.
+    Uses a coarser grid for better stencil visibility and shows ALL stencils clearly.
 
     Args:
         alpha: Thermal diffusivity coefficient
@@ -314,86 +314,305 @@ def create_heat_lattice_animation(
         boundary_conditions: Tuple of (u(0,t), u(L,t))
         output_filename: Name of output GIF file
     """
-    # Solve heat equation
-    x, t, u = solve_heat_equation_1d(
-        alpha, L, T, nx, nt, initial_condition, boundary_conditions
+    # Use coarser grid for better visualization if original is too fine
+    nx_vis = min(nx, 15)  # Limit to 15 points for clear stencil visibility
+    nt_vis = min(nt, 12)  # Limit time steps for clear visualization
+
+    # Solve heat equation with coarser grid for visualization
+    x_vis, t_vis, u_vis = solve_heat_equation_1d(
+        alpha, L, T, nx_vis, nt_vis, initial_condition, boundary_conditions
     )
 
     # Create space-time meshgrid for visualization
-    X, T_grid = np.meshgrid(x, t)
+    X_vis, T_vis_grid = np.meshgrid(x_vis, t_vis)
 
-    frames = []
-    n_frames = min(30, nt + 1)
-    frame_indices = np.linspace(0, nt, n_frames, dtype=int)
+    frames: list[Image.Image] = []
+    n_frames = min(20, nt_vis + 1)
+    frame_indices = np.linspace(0, nt_vis, n_frames, dtype=int)
 
     for frame_idx, current_time_idx in enumerate(frame_indices):
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+        fig = plt.figure(figsize=(16, 10))
 
-        # Left plot: Space-time lattice
-        # Plot all grid points as grey initially
-        ax1.scatter(X.flatten(), T_grid.flatten(), c="lightgrey", s=20, alpha=0.5)
+        # Create subplot layout: 2 plots on top, text box below
+        ax1 = plt.subplot(2, 2, 1)  # Top left
+        ax2 = plt.subplot(2, 2, 2)  # Top right
+        ax3 = plt.subplot(2, 1, 2)  # Bottom (spans full width)
+        ax3.axis("off")  # Turn off axis for text area
 
-        # Highlight computed points (up to current time) in blue
+        # Left plot: Space-time lattice with enhanced stencil visualization
+        # Plot all grid points as larger grey dots for better visibility
+        ax1.scatter(
+            X_vis.flatten(),
+            T_vis_grid.flatten(),
+            c="lightgrey",
+            s=60,
+            alpha=0.6,
+            edgecolor="black",
+            linewidth=0.5,
+        )
+
+        # Highlight computed points (up to current time) in blue with larger size
         for t_idx in range(current_time_idx + 1):
-            ax1.scatter(x, t[t_idx] * np.ones_like(x), c="blue", s=30)
+            ax1.scatter(
+                x_vis,
+                t_vis[t_idx] * np.ones_like(x_vis),
+                c="blue",
+                s=80,
+                alpha=0.8,
+                edgecolor="darkblue",
+                linewidth=1,
+            )
 
-        # Highlight current time level in red
+        # Highlight current time level in red with even larger size
         if current_time_idx > 0:
-            ax1.scatter(x, t[current_time_idx] * np.ones_like(x), c="red", s=50)
+            ax1.scatter(
+                x_vis,
+                t_vis[current_time_idx] * np.ones_like(x_vis),
+                c="red",
+                s=120,
+                alpha=0.9,
+                edgecolor="darkred",
+                linewidth=2,
+            )
 
-        # Show stencil for interior points at current time
+        # Show ALL stencils for interior points at current time (not just a subset)
         if current_time_idx > 0:
-            for i in range(1, nx - 1, max(1, nx // 10)):  # Show every few points
-                # Stencil points: (i-1,n), (i,n), (i+1,n), (i,n+1)
-                stencil_x = [x[i - 1], x[i], x[i + 1], x[i]]
+            # Show stencils for ALL interior points to make the pattern clear
+            for i in range(
+                1, nx_vis - 1
+            ):  # Show ALL interior points, not just a subset
+                # Stencil points: (i-1,n), (i,n), (i+1,n) -> (i,n+1)
+                stencil_x = [x_vis[i - 1], x_vis[i], x_vis[i + 1]]
                 stencil_t = [
-                    t[current_time_idx - 1],
-                    t[current_time_idx - 1],
-                    t[current_time_idx - 1],
-                    t[current_time_idx],
+                    t_vis[current_time_idx - 1],
+                    t_vis[current_time_idx - 1],
+                    t_vis[current_time_idx - 1],
                 ]
-                ax1.plot(stencil_x, stencil_t, "g-", linewidth=2, alpha=0.7)
+                target_x = x_vis[i]
+                target_t = t_vis[current_time_idx]
 
-        ax1.set_xlabel("Space (x)")
-        ax1.set_ylabel("Time (t)")
+                # Draw stencil connections with different colors for clarity
+                # Connections from stencil points to target
+                for sx, st in zip(stencil_x, stencil_t):
+                    ax1.plot(
+                        [sx, target_x], [st, target_t], "lime", linewidth=3, alpha=0.8
+                    )
+
+                # Highlight stencil points with special markers
+                ax1.scatter(
+                    stencil_x,
+                    stencil_t,
+                    c="orange",
+                    s=100,
+                    marker="^",
+                    edgecolor="darkorange",
+                    linewidth=2,
+                    alpha=0.9,
+                    zorder=5,
+                )
+
+                # Highlight target point being computed
+                ax1.scatter(
+                    target_x,
+                    target_t,
+                    c="yellow",
+                    s=140,
+                    marker="s",
+                    edgecolor="gold",
+                    linewidth=3,
+                    alpha=0.9,
+                    zorder=6,
+                )
+
+        # Add boundary points highlighting
+        if current_time_idx >= 0:
+            # Highlight boundary points at all computed time levels
+            for t_idx in range(current_time_idx + 1):
+                ax1.scatter(
+                    [x_vis[0], x_vis[-1]],
+                    [t_vis[t_idx], t_vis[t_idx]],
+                    c="purple",
+                    s=100,
+                    marker="D",
+                    edgecolor="darkviolet",
+                    linewidth=2,
+                    alpha=0.8,
+                )
+
+        ax1.set_xlabel("Space (x)", fontsize=12)
+        ax1.set_ylabel("Time (t)", fontsize=12)
         ax1.set_title(
-            f"Heat Equation Lattice March\n(Time step {current_time_idx}/{nt})"
+            f"Heat Equation Explicit Stencil Lattice\nTime step {current_time_idx}/{nt_vis} (Grid: {nx_vis}×{nt_vis+1})",
+            fontsize=14,
         )
-        ax1.grid(True, alpha=0.3)
+        ax1.grid(True, alpha=0.4, linewidth=1)
+        ax1.set_xlim(-0.05, L + 0.05)
+        ax1.set_ylim(-T * 0.05, T + T * 0.05)
 
-        # Right plot: Current solution profile
-        ax2.plot(
-            x,
-            u[:, current_time_idx],
-            "b-",
-            linewidth=2,
-            label=f"t = {t[current_time_idx]:.3f}",
+        # Add legend for clarity
+        legend_elements = [
+            plt.scatter(
+                [],
+                [],
+                c="lightgrey",
+                s=60,
+                alpha=0.6,
+                edgecolor="black",
+                label="Uncomputed points",
+            ),
+            plt.scatter(
+                [],
+                [],
+                c="blue",
+                s=80,
+                alpha=0.8,
+                edgecolor="darkblue",
+                label="Computed points",
+            ),
+            plt.scatter(
+                [],
+                [],
+                c="red",
+                s=120,
+                alpha=0.9,
+                edgecolor="darkred",
+                label="Current time level",
+            ),
+            plt.scatter(
+                [],
+                [],
+                c="orange",
+                s=100,
+                marker="^",
+                edgecolor="darkorange",
+                label="Stencil points",
+            ),
+            plt.scatter(
+                [],
+                [],
+                c="yellow",
+                s=140,
+                marker="s",
+                edgecolor="gold",
+                label="Target points",
+            ),
+            plt.scatter(
+                [],
+                [],
+                c="purple",
+                s=100,
+                marker="D",
+                edgecolor="darkviolet",
+                label="Boundary points",
+            ),
+        ]
+        ax1.legend(
+            handles=legend_elements,
+            loc="upper left",
+            bbox_to_anchor=(0, 1),
+            fontsize=10,
         )
-        ax2.plot(x, u[:, 0], "r--", alpha=0.5, label="Initial condition")
-        ax2.set_xlabel("x")
-        ax2.set_ylabel("u(x,t)")
-        ax2.set_title("Current Temperature Profile")
-        ax2.legend()
-        ax2.grid(True, alpha=0.3)
-        ax2.set_ylim(np.min(u) * 1.1, np.max(u) * 1.1)
+
+        # Right plot: Current solution profile with enhanced visualization
+        ax2.plot(
+            x_vis,
+            u_vis[:, current_time_idx],
+            "b-",
+            linewidth=3,
+            marker="o",
+            markersize=8,
+            label=f"t = {t_vis[current_time_idx]:.3f}",
+        )
+        ax2.plot(
+            x_vis,
+            u_vis[:, 0],
+            "r--",
+            alpha=0.7,
+            linewidth=2,
+            marker="s",
+            markersize=6,
+            label="Initial condition",
+        )
+
+        # Highlight boundary conditions
+        ax2.scatter(
+            [x_vis[0], x_vis[-1]],
+            [u_vis[0, current_time_idx], u_vis[-1, current_time_idx]],
+            c="purple",
+            s=120,
+            marker="D",
+            edgecolor="darkviolet",
+            linewidth=2,
+            zorder=5,
+            label="Boundary conditions",
+        )
+
+        ax2.set_xlabel("x", fontsize=12)
+        ax2.set_ylabel("u(x,t)", fontsize=12)
+        ax2.set_title("Temperature Profile", fontsize=14)
+        ax2.legend(fontsize=11)
+        ax2.grid(True, alpha=0.4)
+        ax2.set_ylim(np.min(u_vis) * 1.1, np.max(u_vis) * 1.1)
+
+        # Add text box with stencil information
+        if current_time_idx > 0:
+            stencil_info = f"""Explicit Finite Difference Stencil:
+
+Grid: {nx_vis} spatial × {nt_vis+1} temporal points
+Current time step: {current_time_idx}/{nt_vis}
+
+For each interior point u[i,n+1]:
+u[i,n+1] = u[i,n] + r·(u[i+1,n] - 2·u[i,n] + u[i-1,n])
+
+where r = α·dt/dx² = {alpha * (T/nt_vis) / ((L/(nx_vis-1))**2):.4f}
+
+Stencil pattern (orange → yellow):
+• 3 points at time n (triangles)
+• 1 point at time n+1 (square)
+
+ALL interior stencils shown for clarity!"""
+        else:
+            stencil_info = f"""Initial Condition Setup:
+
+Grid: {nx_vis} spatial × {nt_vis+1} temporal points
+Boundary conditions (purple diamonds):
+• u(0,t) = {boundary_conditions[0]}
+• u(L,t) = {boundary_conditions[1]}
+
+Initial condition u(x,0) applied to all spatial points.
+Ready to begin time marching with explicit scheme."""
+
+        ax3.text(
+            0.05,
+            0.95,
+            stencil_info,
+            transform=ax3.transAxes,
+            fontsize=10,
+            verticalalignment="top",
+            fontfamily="monospace",
+            bbox=dict(boxstyle="round,pad=0.8", facecolor="lightcyan", alpha=0.9),
+        )
 
         plt.tight_layout()
         plt.savefig(
-            f"temp_lattice_frame_{frame_idx:03d}.png", dpi=100, bbox_inches="tight"
+            f"temp_lattice_frame_{frame_idx:03d}.png", dpi=120, bbox_inches="tight"
         )
         frames.append(Image.open(f"temp_lattice_frame_{frame_idx:03d}.png"))
         plt.close()
 
-    # Create GIF
+    # Create GIF with slower duration for better visibility
     frames[0].save(
-        output_filename, save_all=True, append_images=frames[1:], duration=500, loop=0
+        output_filename, save_all=True, append_images=frames[1:], duration=800, loop=0
     )
 
     # Clean up
     for i in range(n_frames):
         os.remove(f"temp_lattice_frame_{i:03d}.png")
 
-    print(f"Heat lattice animation saved as {output_filename}")
+    print(f"Enhanced heat lattice animation saved as {output_filename}")
+    print(f"Coarse grid used: {nx_vis} spatial × {nt_vis+1} temporal points")
+    print(f"ALL stencils shown for maximum clarity")
+    print(f"Animation duration: 800ms per frame for detailed viewing")
 
 
 def create_poisson_iteration_gif(
@@ -546,25 +765,271 @@ def create_poisson_iteration_gif(
     print(f"Poisson iteration animation saved as {output_filename}")
 
 
+def create_heat_stencil_animation(
+    alpha: float = 0.01,
+    L: float = 1.0,
+    T: float = 1.0,  # Changed from 0.1 to 1.0
+    nx: int = 21,
+    nt: int = 20,
+    initial_condition: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+    boundary_conditions: Tuple[float, float] = (0.0, 0.0),
+    output_filename: str = "heat_stencil_animation.gif",
+) -> None:
+    """Creates animated GIF showing heat equation explicit finite difference stencil progression.
+
+    Shows the stencil moving left-to-right across space, then advancing in time.
+    Each point u[i,n+1] is computed using the stencil: u[i-1,n], u[i,n], u[i+1,n].
+
+    Args:
+        alpha: Thermal diffusivity coefficient
+        L: Spatial domain length
+        T: Total time
+        nx: Number of spatial grid points
+        nt: Number of time steps
+        initial_condition: Function defining u(x,0), defaults to Gaussian pulse
+        boundary_conditions: Tuple of (u(0,t), u(L,t))
+        output_filename: Name of output GIF file
+    """
+    # Default initial condition if none provided
+    if initial_condition is None:
+
+        def initial_condition(x):
+            return np.exp(-50 * (x - 0.5) ** 2)
+
+    # Grid setup
+    dx: float = L / (nx - 1)
+    dt: float = T / nt
+    r: float = alpha * dt / (dx**2)
+
+    # Stability check
+    if r > 0.5:
+        print(f"Warning: r = {r:.4f} > 0.5, scheme may be unstable!")
+
+    # Initialize grids
+    x: np.ndarray = np.linspace(0, L, nx)
+    t: np.ndarray = np.linspace(0, T, nt + 1)
+    u: np.ndarray = np.zeros((nx, nt + 1))
+
+    # Initial condition
+    u[:, 0] = initial_condition(x)
+
+    # Boundary conditions
+    u[0, :] = boundary_conditions[0]
+    u[-1, :] = boundary_conditions[1]
+
+    # Create space-time meshgrid for visualization
+    X_space, T_grid = np.meshgrid(x, t)
+
+    frames: list[Image.Image] = []
+
+    # For each time step (except the first which is initial condition)
+    for n in range(nt):
+        # For each interior spatial point (left to right)
+        for i in range(1, nx - 1):
+            fig = plt.figure(figsize=(16, 12))
+
+            # Create subplot layout: 2 plots on top, text box below
+            ax1 = plt.subplot(2, 2, 1)  # Top left
+            ax2 = plt.subplot(2, 2, 2)  # Top right
+            ax3 = plt.subplot(2, 1, 2)  # Bottom (spans full width)
+            ax3.axis("off")  # Turn off axis for text area
+
+            # Left plot: Space-time lattice with stencil
+            # Plot all grid points as grey dots
+            ax1.scatter(
+                X_space.flatten(), T_grid.flatten(), c="lightgrey", s=15, alpha=0.5
+            )
+
+            # Highlight computed points (all previous time levels)
+            for prev_t in range(n + 1):
+                ax1.scatter(x, t[prev_t] * np.ones_like(x), c="blue", s=25, alpha=0.7)
+
+            # Highlight current time level points that are already computed
+            for computed_i in range(1, i):
+                ax1.scatter(x[computed_i], t[n + 1], c="green", s=40, marker="s")
+
+            # Highlight boundary points at current time level
+            ax1.scatter(x[0], t[n + 1], c="red", s=50, marker="s", label="Boundary")
+            ax1.scatter(x[-1], t[n + 1], c="red", s=50, marker="s")
+
+            # Highlight current stencil points
+            stencil_x = [x[i - 1], x[i], x[i + 1]]
+            stencil_t = [t[n], t[n], t[n]]
+            ax1.scatter(
+                stencil_x,
+                stencil_t,
+                c="orange",
+                s=80,
+                marker="^",
+                edgecolor="darkorange",
+                linewidth=2,
+                label="Stencil points",
+            )
+
+            # Highlight target point being computed
+            ax1.scatter(
+                x[i],
+                t[n + 1],
+                c="lime",
+                s=100,
+                marker="s",
+                edgecolor="darkgreen",
+                linewidth=3,
+                label=f"Computing u[{i},{n+1}]",
+            )
+
+            # Draw stencil connections
+            for sx, st in zip(stencil_x, stencil_t):
+                ax1.plot([sx, x[i]], [st, t[n + 1]], "orange", linewidth=3, alpha=0.8)
+
+            # Compute the new value using explicit scheme
+            old_value = u[i, n + 1]  # This should be 0 initially
+            u[i, n + 1] = u[i, n] + r * (u[i + 1, n] - 2 * u[i, n] + u[i - 1, n])
+
+            ax1.set_xlabel("Space (x)")
+            ax1.set_ylabel("Time (t)")
+            ax1.set_title(
+                f"Heat Equation Explicit Stencil\nTime step {n+1}/{nt}, Point {i}/{nx-2}"
+            )
+            ax1.legend(loc="upper left")
+            ax1.grid(True, alpha=0.3)
+            ax1.set_xlim(-0.05, L + 0.05)
+            ax1.set_ylim(-0.01, T + 0.01)
+
+            # Right plot: Current solution profile and stencil details
+            # Plot current and previous solution profiles
+            if n > 0:
+                ax2.plot(
+                    x,
+                    u[:, n],
+                    "b--",
+                    linewidth=2,
+                    alpha=0.7,
+                    label=f"t = {t[n]:.3f} (previous)",
+                )
+            ax2.plot(
+                x, u[:, n + 1], "r-", linewidth=2, label=f"t = {t[n+1]:.3f} (current)"
+            )
+            ax2.plot(x, u[:, 0], "k:", alpha=0.5, label="Initial condition")
+
+            # Highlight stencil points on solution plot
+            ax2.scatter(
+                [x[i - 1], x[i], x[i + 1]],
+                [u[i - 1, n], u[i, n], u[i + 1, n]],
+                c="orange",
+                s=80,
+                marker="^",
+                edgecolor="darkorange",
+                linewidth=2,
+                zorder=5,
+            )
+            ax2.scatter(
+                x[i],
+                u[i, n + 1],
+                c="lime",
+                s=100,
+                marker="s",
+                edgecolor="darkgreen",
+                linewidth=3,
+                zorder=5,
+            )
+
+            ax2.set_xlabel("x")
+            ax2.set_ylabel("u(x,t)")
+            ax2.set_title("Solution Profile with Stencil")
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+
+            # Add text box with stencil calculation details
+            stencil_info = f"""Explicit Finite Difference Update:
+
+Time step: n = {n} → n+1 = {n+1}
+Spatial point: i = {i} (x = {x[i]:.3f})
+
+Stencil values at time n = {n}:
+  u[{i-1},{n}] = {u[i-1, n]:.6f}  (left)
+  u[{i},{n}] = {u[i, n]:.6f}  (center)  
+  u[{i+1},{n}] = {u[i+1, n]:.6f}  (right)
+
+Parameters:
+  r = α·dt/dx² = {r:.4f}
+  dx = {dx:.4f}, dt = {dt:.6f}
+
+Explicit scheme:
+u[{i},{n+1}] = u[{i},{n}] + r·(u[{i+1},{n}] - 2·u[{i},{n}] + u[{i-1},{n}])
+u[{i},{n+1}] = {u[i, n]:.6f} + {r:.4f}·({u[i+1, n]:.6f} - 2·{u[i, n]:.6f} + {u[i-1, n]:.6f})
+u[{i},{n+1}] = {u[i, n]:.6f} + {r:.4f}·{u[i+1, n] - 2*u[i, n] + u[i-1, n]:.6f}
+u[{i},{n+1}] = {u[i, n + 1]:.6f}
+
+Progress: Point {i-1}/{nx-2} in time step {n+1}/{nt}
+Stability: {"STABLE" if r <= 0.5 else "UNSTABLE"}"""
+
+            ax3.text(
+                0.05,
+                0.95,
+                stencil_info,
+                transform=ax3.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                fontfamily="monospace",
+                bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.9),
+            )
+
+            plt.tight_layout()
+            frame_filename = f"temp_heat_stencil_frame_{len(frames):04d}.png"
+            plt.savefig(frame_filename, dpi=100, bbox_inches="tight")
+            frames.append(Image.open(frame_filename))
+            plt.close()
+
+    # Create GIF
+    frames[0].save(
+        output_filename,
+        save_all=True,
+        append_images=frames[1:],
+        duration=300,  # 300ms per frame
+        loop=0,
+    )
+
+    # Clean up temporary files
+    for i in range(len(frames)):
+        os.remove(f"temp_heat_stencil_frame_{i:04d}.png")
+
+    print(f"Heat equation stencil animation saved as {output_filename}")
+    print(f"Animation shows {len(frames)} frames")
+    print(f"Progression: LEFT→RIGHT (space), then advance in TIME")
+    print(
+        f"Each interior point computed using 3-point stencil from previous time level"
+    )
+    print(f"Stability parameter r = {r:.4f} ({'STABLE' if r <= 0.5 else 'UNSTABLE'})")
+
+
 def create_grid_update_animation(
     nx: int = 21, ny: int = 21, output_filename: str = "grid_stencil_animation.gif"
 ) -> None:
-    """Creates animated GIF showing grid point-by-point update with stencil and solution.
+    """Creates enhanced animated GIF showing 2D Poisson equation stencil with solution evolution.
 
-    Shows how each point in a 2D grid is updated using neighboring points in the
-    finite difference stencil for Poisson equation, with color-coded solution background.
+    Enhanced features:
+    1. Visited points turn blue (from grey)
+    2. Coarser grid for better visibility (max 13×13)
+    3. Left-to-right stencil movement (proper Gauss-Seidel order)
+    4. Solution appears with color-coded values (mountain/hill shape)
+    5. Clear visualization of the iterative process
 
     Args:
-        nx, ny: Grid dimensions
+        nx, ny: Grid dimensions (will be limited for better visualization)
         output_filename: Name of output GIF file
     """
-    # Create grid
-    x = np.linspace(0, 1, nx)
-    y = np.linspace(0, 1, ny)
+    # Use coarser grid for better stencil visibility
+    nx_vis = min(nx, 13)  # Limit to 13 points max for clear visualization
+    ny_vis = min(ny, 13)  # Limit to 13 points max for clear visualization
+
+    # Create coarser grid
+    x = np.linspace(0, 1, nx_vis)
+    y = np.linspace(0, 1, ny_vis)
     X, Y = np.meshgrid(x, y)
 
     # Define a test Poisson problem: ∇²u = -2π²sin(πx)sin(πy)
-    # Analytical solution: u = sin(πx)sin(πy)
+    # Analytical solution: u = sin(πx)sin(πy) (creates mountain/hill shape)
     def source_function(X, Y):
         return -2 * np.pi**2 * np.sin(np.pi * X) * np.sin(np.pi * Y)
 
@@ -572,8 +1037,8 @@ def create_grid_update_animation(
         return np.zeros_like(X)
 
     # Initialize solution
-    u = np.zeros((ny, nx))
-    dx = 1.0 / (nx - 1)
+    u = np.zeros((ny_vis, nx_vis))
+    dx = 1.0 / (nx_vis - 1)
     source = source_function(X, Y)
 
     # Apply boundary conditions (u = 0 on boundaries)
@@ -582,302 +1047,327 @@ def create_grid_update_animation(
     u[:, 0] = boundary_zero(X[:, 0], Y[:, 0])
     u[:, -1] = boundary_zero(X[:, -1], Y[:, -1])
 
-    # Get all interior points in order (row by row)
+    # Get all interior points in order (row by row, left to right)
+    # CRITICAL: This creates the correct left-to-right, top-to-bottom order
     interior_points = []
-    for i in range(1, ny - 1):
-        for j in range(1, nx - 1):
+    for i in range(1, ny_vis - 1):  # i = row index (y-coordinate, top to bottom)
+        for j in range(1, nx_vis - 1):  # j = column index (x-coordinate, left to right)
             interior_points.append((i, j))
 
-    # Perform MASSIVE number of sweeps for full convergence (1M+ iterations)
-    # Jacobi method is very slow - need many more iterations for fine grids
-    min_iterations = 1000000  # At least 1 million iterations
-    n_sweeps = max(
-        500, min_iterations // len(interior_points)
-    )  # Ensure at least 1M iterations
-    total_iterations = n_sweeps * len(interior_points)
+    print(f"Enhanced stencil animation - Grid: {nx_vis}×{ny_vis}")
+    print(f"Interior points order (first 10): {interior_points[:10]}")
+    print(f"Total interior points: {len(interior_points)}")
 
-    # Create frames showing key convergence milestones
-    max_frames = 200  # More frames to capture the slow convergence
-    frame_step = max(1, total_iterations // max_frames)
+    # Use more sweeps to show convergence process
+    n_sweeps = 20  # Show 20 sweeps to demonstrate convergence
 
-    selected_iterations = list(range(0, total_iterations, frame_step))
+    # Calculate global min/max for consistent colorbar using analytical solution
+    analytical_solution = np.sin(np.pi * X) * np.sin(np.pi * Y)
+    vmin, vmax = np.min(analytical_solution), np.max(analytical_solution)
+    if vmax - vmin < 1e-10:
+        vmin, vmax = -0.1, 0.1
 
-    frames = []
+    frames: list[Image.Image] = []
 
-    # Calculate global min/max for consistent colorbar
-    # Do a few iterations to get reasonable range
-    u_temp = u.copy()
-    for _ in range(10):
-        for i, j in interior_points:
-            u_temp[i, j] = 0.25 * (
-                u_temp[i + 1, j]
-                + u_temp[i - 1, j]
-                + u_temp[i, j + 1]
-                + u_temp[i, j - 1]
+    # Track visited points for blue coloring
+    visited_points = set()
+
+    # Show selective point updates to keep animation manageable
+    for sweep in range(n_sweeps):
+        for point_idx, (i, j) in enumerate(interior_points):
+            # Skip frames strategically to keep file size reasonable while showing convergence
+            if sweep == 0:
+                # Show every point in first sweep for complete understanding
+                skip_frame = False
+            elif sweep < 5:
+                # Show every 2nd point in sweeps 2-5
+                skip_frame = point_idx % 2 != 0
+            elif sweep < 10:
+                # Show every 4th point in sweeps 6-10
+                skip_frame = point_idx % 4 != 0
+            else:
+                # Show every 8th point in later sweeps (11-20)
+                skip_frame = point_idx % 8 != 0
+
+            if skip_frame:
+                # Still update the solution, just don't create a frame
+                u[i, j] = 0.25 * (
+                    u[i + 1, j]
+                    + u[i - 1, j]
+                    + u[i, j + 1]
+                    + u[i, j - 1]
+                    - dx**2 * source[i, j]
+                )
+                visited_points.add((i, j))
+                continue
+
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
+
+            # Left plot: Enhanced solution visualization with visited points
+            # Create background solution contour (mountain/hill shape appearing)
+            levels = np.linspace(vmin, vmax, 21)
+            im = ax1.contourf(
+                X, Y, u, levels=levels, cmap="viridis", alpha=0.7, vmin=vmin, vmax=vmax
+            )
+            ax1.contour(
+                X, Y, u, levels=levels, colors="white", alpha=0.4, linewidths=0.8
+            )
+
+            # Plot ALL grid points with different colors based on status
+            for gi in range(ny_vis):
+                for gj in range(nx_vis):
+                    # Determine point color and size based on status
+                    if gi == 0 or gi == ny_vis - 1 or gj == 0 or gj == nx_vis - 1:
+                        # Boundary points - red squares
+                        ax1.scatter(
+                            X[gi, gj],
+                            Y[gi, gj],
+                            c="red",
+                            s=80,
+                            marker="s",
+                            edgecolor="darkred",
+                            linewidth=2,
+                            alpha=0.9,
+                            zorder=4,
+                        )
+                    elif (gi, gj) in visited_points:
+                        # Visited interior points - blue circles
+                        ax1.scatter(
+                            X[gi, gj],
+                            Y[gi, gj],
+                            c="blue",
+                            s=60,
+                            marker="o",
+                            edgecolor="darkblue",
+                            linewidth=1.5,
+                            alpha=0.8,
+                            zorder=3,
+                        )
+                    elif gi == i and gj == j:
+                        # Current point being updated - large yellow square
+                        ax1.scatter(
+                            X[gi, gj],
+                            Y[gi, gj],
+                            c="yellow",
+                            s=150,
+                            marker="s",
+                            edgecolor="orange",
+                            linewidth=3,
+                            alpha=1.0,
+                            zorder=6,
+                        )
+                    elif (gi, gj) in [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]:
+                        # Stencil neighbor points - lime triangles
+                        ax1.scatter(
+                            X[gi, gj],
+                            Y[gi, gj],
+                            c="lime",
+                            s=100,
+                            marker="^",
+                            edgecolor="darkgreen",
+                            linewidth=2,
+                            alpha=0.9,
+                            zorder=5,
+                        )
+                    else:
+                        # Unvisited interior points - grey circles
+                        ax1.scatter(
+                            X[gi, gj],
+                            Y[gi, gj],
+                            c="lightgrey",
+                            s=50,
+                            marker="o",
+                            edgecolor="grey",
+                            linewidth=1,
+                            alpha=0.6,
+                            zorder=2,
+                        )
+
+            # Draw stencil connections with thicker, more visible lines
+            stencil_connections = [
+                ([X[i - 1, j], X[i, j]], [Y[i - 1, j], Y[i, j]]),  # North
+                ([X[i + 1, j], X[i, j]], [Y[i + 1, j], Y[i, j]]),  # South
+                ([X[i, j - 1], X[i, j]], [Y[i, j - 1], Y[i, j]]),  # West
+                ([X[i, j + 1], X[i, j]], [Y[i, j + 1], Y[i, j]]),  # East
+            ]
+
+            for conn_x, conn_y in stencil_connections:
+                ax1.plot(conn_x, conn_y, "lime", linewidth=5, alpha=0.8, zorder=4)
+
+            # Update the current point using Gauss-Seidel iteration
+            old_value = u[i, j]
+            u[i, j] = 0.25 * (
+                u[i + 1, j]
+                + u[i - 1, j]
+                + u[i, j + 1]
+                + u[i, j - 1]
                 - dx**2 * source[i, j]
             )
 
-    vmin, vmax = np.min(u_temp), np.max(u_temp)
-    if vmax - vmin < 1e-10:  # Handle case where solution is nearly zero
-        vmin, vmax = -0.1, 0.1
+            # Mark this point as visited
+            visited_points.add((i, j))
 
-    for frame_idx, iteration in enumerate(selected_iterations):
-        # Determine which point we're updating in this iteration
-        sweep_num = iteration // len(interior_points)
-        point_in_sweep = iteration % len(interior_points)
-        i, j = interior_points[point_in_sweep]
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
+            ax1.set_xlabel("x", fontsize=14)
+            ax1.set_ylabel("y", fontsize=14)
+            ax1.set_title(
+                f"Enhanced 2D Poisson Stencil Animation\n"
+                f"Sweep {sweep+1}/{n_sweeps}, Point {point_idx+1}/{len(interior_points)} "
+                f"(Grid: {nx_vis}×{ny_vis})",
+                fontsize=16,
+            )
+            ax1.set_aspect("equal")
 
-        # Left plot: Solution with stencil overlay
-        levels = np.linspace(vmin, vmax, 21)
-        im = ax1.contourf(
-            X, Y, u, levels=levels, cmap="RdYlBu_r", alpha=0.8, vmin=vmin, vmax=vmax
-        )
-        ax1.contour(X, Y, u, levels=levels, colors="black", alpha=0.3, linewidths=0.5)
+            # Enhanced colorbar
+            cbar = plt.colorbar(im, ax=ax1, shrink=0.8)
+            cbar.set_label("Solution u(x,y)", fontsize=12)
 
-        # Plot grid points
-        ax1.scatter(X.flatten(), Y.flatten(), c="black", s=15, alpha=0.4)
-
-        # Highlight boundary points
-        boundary_mask = np.zeros_like(X, dtype=bool)
-        boundary_mask[0, :] = True  # Bottom
-        boundary_mask[-1, :] = True  # Top
-        boundary_mask[:, 0] = True  # Left
-        boundary_mask[:, -1] = True  # Right
-
-        ax1.scatter(
-            X[boundary_mask],
-            Y[boundary_mask],
-            c="red",
-            s=40,
-            marker="s",
-            alpha=0.8,
-            label="Boundary points",
-        )
-
-        # Highlight current point being updated
-        ax1.scatter(
-            X[i, j],
-            Y[i, j],
-            c="blue",
-            s=200,
-            marker="s",
-            edgecolor="white",
-            linewidth=2,
-            label=f"Current point ({i},{j})",
-        )
-
-        # Highlight stencil points
-        stencil_points = [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]
-        for si, sj in stencil_points:
-            ax1.scatter(
-                X[si, sj],
-                Y[si, sj],
-                c="lime",
-                s=120,
-                marker="^",
-                edgecolor="darkgreen",
-                linewidth=1,
-                alpha=0.9,
+            # Add comprehensive legend
+            legend_elements = [
+                plt.scatter(
+                    [],
+                    [],
+                    c="lightgrey",
+                    s=50,
+                    marker="o",
+                    edgecolor="grey",
+                    label="Unvisited points",
+                ),
+                plt.scatter(
+                    [],
+                    [],
+                    c="blue",
+                    s=60,
+                    marker="o",
+                    edgecolor="darkblue",
+                    label="Visited points",
+                ),
+                plt.scatter(
+                    [],
+                    [],
+                    c="yellow",
+                    s=150,
+                    marker="s",
+                    edgecolor="orange",
+                    label="Current point",
+                ),
+                plt.scatter(
+                    [],
+                    [],
+                    c="lime",
+                    s=100,
+                    marker="^",
+                    edgecolor="darkgreen",
+                    label="Stencil neighbors",
+                ),
+                plt.scatter(
+                    [],
+                    [],
+                    c="red",
+                    s=80,
+                    marker="s",
+                    edgecolor="darkred",
+                    label="Boundary points",
+                ),
+            ]
+            ax1.legend(
+                handles=legend_elements,
+                loc="upper left",
+                bbox_to_anchor=(0, 1),
+                fontsize=11,
+                framealpha=0.9,
             )
 
-        # Draw stencil connections
-        ax1.plot(
-            [X[i - 1, j], X[i, j]],
-            [Y[i - 1, j], Y[i, j]],
-            "lime",
-            linewidth=4,
-            alpha=0.8,
-        )
-        ax1.plot(
-            [X[i + 1, j], X[i, j]],
-            [Y[i + 1, j], Y[i, j]],
-            "lime",
-            linewidth=4,
-            alpha=0.8,
-        )
-        ax1.plot(
-            [X[i, j - 1], X[i, j]],
-            [Y[i, j - 1], Y[i, j]],
-            "lime",
-            linewidth=4,
-            alpha=0.8,
-        )
-        ax1.plot(
-            [X[i, j + 1], X[i, j]],
-            [Y[i, j + 1], Y[i, j]],
-            "lime",
-            linewidth=4,
-            alpha=0.8,
-        )
+            # Right plot: Enhanced information display
+            ax2.axis("off")
 
-        # Update the current point using Jacobi iteration
-        old_value = u[i, j]
-        u[i, j] = 0.25 * (
-            u[i + 1, j] + u[i - 1, j] + u[i, j + 1] + u[i, j - 1] - dx**2 * source[i, j]
-        )
+            # Calculate progress statistics
+            total_interior = len(interior_points)
+            points_completed = len(visited_points)
+            progress_percent = (points_completed / total_interior) * 100
 
-        # Check convergence every complete sweep
-        if point_in_sweep == len(interior_points) - 1:  # End of sweep
-            max_change = (
-                np.max(np.abs(u - u_temp)) if "u_temp" in locals() else float("inf")
-            )
-            if max_change < 1e-10:  # Converged to machine precision
-                print(
-                    f"Converged after {iteration+1} iterations (max change: {max_change:.2e})"
-                )
+            # Show detailed information
+            info_text = f"""Enhanced 2D Poisson Equation Stencil Visualization
 
-        # Store solution at beginning of each sweep for convergence check
-        if point_in_sweep == 0:
-            u_temp = u.copy()
+PROBLEM: ∇²u = -2π²sin(πx)sin(πy)
+SOLUTION: u = sin(πx)sin(πy) (mountain/hill shape)
 
-        ax1.set_xlabel("x")
-        ax1.set_ylabel("y")
-        ax1.set_title(
-            f"Poisson Equation: 5-Point Stencil Update\nSweep {sweep_num+1}/{n_sweeps}, Point ({i},{j}) - Iteration {iteration+1}/{total_iterations}"
-        )
-        ax1.legend(loc="upper left", bbox_to_anchor=(0, 1))
-        ax1.set_aspect("equal")
-        plt.colorbar(im, ax=ax1, shrink=0.8)
+GRID INFORMATION:
+• Grid size: {nx_vis} × {ny_vis} points
+• Interior points: {total_interior}
+• Boundary conditions: u = 0 on all edges
 
-        # Right plot: Stencil values and calculation
-        ax2.axis("off")
+CURRENT STATUS:
+• Sweep: {sweep+1}/{n_sweeps}
+• Point: {point_idx+1}/{total_interior} in current sweep
+• Progress: {progress_percent:.1f}% complete
+• Grid position: row {i}, col {j}
+• Physical coordinates: ({X[i,j]:.3f}, {Y[i,j]:.3f})
 
-        # Create a zoomed view of the stencil
-        stencil_info = f"""Jacobi Iteration Progress:
+GAUSS-SEIDEL UPDATE:
+Current value: u[{i},{j}] = {old_value:.6f}
 
-Sweep: {sweep_num+1}/{n_sweeps}
-Point: ({i},{j}) - {point_in_sweep+1}/{len(interior_points)} in sweep
-Total iteration: {iteration+1}/{total_iterations}
+Stencil neighbors (using latest values):
+  North: u[{i-1},{j}] = {u[i-1, j]:.6f}
+  South: u[{i+1},{j}] = {u[i+1, j]:.6f}
+  West:  u[{i},{j-1}] = {u[i, j-1]:.6f}
+  East:  u[{i},{j+1}] = {u[i, j+1]:.6f}
 
-Current point: u[{i},{j}] = {old_value:.4f}
-
-Stencil values:
-  u[{i-1},{j}] = {u[i-1, j]:.4f}  (North)
-  u[{i+1},{j}] = {u[i+1, j]:.4f}  (South)  
-  u[{i},{j-1}] = {u[i, j-1]:.4f}  (West)
-  u[{i},{j+1}] = {u[i, j+1]:.4f}  (East)
-
-Source: f[{i},{j}] = {source[i, j]:.4f}
-Grid spacing: h = {dx:.4f}
+Source term: f[{i},{j}] = {source[i, j]:.6f}
 
 Update formula:
 u_new = (u_N + u_S + u_W + u_E - h²f) / 4
+u_new = {u[i, j]:.6f}
 
-u_new[{i},{j}] = ({u[i-1, j]:.4f} + {u[i+1, j]:.4f} + {u[i, j-1]:.4f} + {u[i, j+1]:.4f} - {dx**2 * source[i, j]:.4f}) / 4
+Change: Δu = {u[i, j] - old_value:.6f}
 
-u_new[{i},{j}] = {u[i, j]:.4f}
+SOLUTION EVOLUTION:
+• Mountain/hill shape appearing at center
+• Maximum at (0.5, 0.5) ≈ {np.max(analytical_solution):.3f}
+• Analytical solution: {analytical_solution[i, j]:.6f}
+• Current error: {abs(u[i, j] - analytical_solution[i, j]):.2e}
 
-Change: Δu = {u[i, j] - old_value:.4f}"""
+TRAVERSAL: LEFT→RIGHT, then TOP→BOTTOM
+Row {i}: ({i},1) → ({i},2) → ... → ({i},{nx_vis-2})"""
 
-        ax2.text(
-            0.05,
-            0.95,
-            stencil_info,
-            transform=ax2.transAxes,
-            fontsize=10,
-            verticalalignment="top",
-            fontfamily="monospace",
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.8),
-        )
+            ax2.text(
+                0.05,
+                0.95,
+                info_text,
+                transform=ax2.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                fontfamily="monospace",
+                bbox=dict(boxstyle="round,pad=0.8", facecolor="lightcyan", alpha=0.95),
+            )
 
-        # Add a small diagram of the stencil
-        ax2.text(
-            0.05,
-            0.35,
-            "Stencil Pattern:",
-            transform=ax2.transAxes,
-            fontsize=12,
-            weight="bold",
-        )
+            plt.tight_layout()
+            frame_filename = f"temp_enhanced_stencil_frame_{len(frames):04d}.png"
+            plt.savefig(frame_filename, dpi=120, bbox_inches="tight")
+            frames.append(Image.open(frame_filename))
+            plt.close()
 
-        # Draw stencil diagram
-        center_x, center_y = 0.3, 0.2
-        spacing = 0.08
-
-        # Draw points
-        ax2.plot(
-            center_x, center_y, "bs", markersize=15, transform=ax2.transAxes
-        )  # Center
-        ax2.plot(
-            center_x, center_y + spacing, "g^", markersize=12, transform=ax2.transAxes
-        )  # North
-        ax2.plot(
-            center_x, center_y - spacing, "g^", markersize=12, transform=ax2.transAxes
-        )  # South
-        ax2.plot(
-            center_x - spacing, center_y, "g^", markersize=12, transform=ax2.transAxes
-        )  # West
-        ax2.plot(
-            center_x + spacing, center_y, "g^", markersize=12, transform=ax2.transAxes
-        )  # East
-
-        # Draw connections
-        ax2.plot(
-            [center_x, center_x],
-            [center_y - spacing, center_y + spacing],
-            "g-",
-            linewidth=3,
-            alpha=0.7,
-            transform=ax2.transAxes,
-        )
-        ax2.plot(
-            [center_x - spacing, center_x + spacing],
-            [center_y, center_y],
-            "g-",
-            linewidth=3,
-            alpha=0.7,
-            transform=ax2.transAxes,
-        )
-
-        # Labels
-        ax2.text(
-            center_x,
-            center_y - 0.04,
-            f"({i},{j})",
-            transform=ax2.transAxes,
-            ha="center",
-            fontsize=8,
-        )
-
-        # Ensure consistent layout
-        plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1)
-        plt.savefig(
-            f"temp_stencil_frame_{frame_idx:03d}.png", dpi=100, bbox_inches="tight"
-        )
-        frames.append(Image.open(f"temp_stencil_frame_{frame_idx:03d}.png"))
-        plt.close()
-
-    # Create GIF
+    # Create GIF with faster speed for 20 sweeps
     frames[0].save(
         output_filename,
         save_all=True,
         append_images=frames[1:],
-        duration=25,  # Ultra fast animation - 25ms per frame (40 fps)
+        duration=150,  # 150ms per frame for faster viewing of 20 sweeps
         loop=0,
     )
 
     # Clean up
-    for i in range(len(selected_iterations)):
-        os.remove(f"temp_stencil_frame_{i:03d}.png")
+    for i in range(len(frames)):
+        os.remove(f"temp_enhanced_stencil_frame_{i:04d}.png")
 
-    print(f"Enhanced grid stencil animation saved as {output_filename}")
+    print(f"Enhanced 2D Poisson stencil animation saved as {output_filename}")
+    print(f"Grid: {nx_vis}×{ny_vis} (coarser for better visibility)")
+    print(f"Animation shows {len(frames)} frames over {n_sweeps} sweeps")
+    print(f"Features: visited points turn blue, solution appears, left→right movement")
+    print(f"Mountain/hill solution shape clearly visible as it evolves")
     print(
-        f"Animation shows {len(selected_iterations)} frames over {n_sweeps} complete sweeps"
+        f"Frame sampling: full sweep 1, every 2nd point sweeps 2-5, every 4th sweeps 6-10, every 8th sweeps 11-20"
     )
-    print(
-        f"Total iterations: {total_iterations:,} (showing every {frame_step} iterations)"
-    )
-    print(
-        f"Each sweep processes all {len(interior_points)} interior points sequentially"
-    )
-    print(f"Stencil moves point-by-point: row by row, left to right")
-    print(
-        f"Animation speed: 25ms per frame (40 fps) for ultra-fast convergence visualization"
-    )
-    print(
-        f"WARNING: This will run {total_iterations:,} iterations - may take several minutes to generate!"
-    )
+    print(f"Animation speed: 150ms per frame for faster viewing of convergence process")
 
 
 def plot_heat_results(
@@ -891,8 +1381,8 @@ def plot_heat_results(
 ) -> None:
     """Plots comprehensive results for heat equation.
 
-    Creates multiple subplots showing solution evolution, stability analysis,
-    and various cross-sections.
+    Creates multiple subplots showing solution evolution, energy evolution,
+    temperature profiles, and various cross-sections.
     """
     # Solve heat equation
     x, t, u = solve_heat_equation_1d(
@@ -937,50 +1427,29 @@ def plot_heat_results(
     ax3.legend()
     ax3.grid(True, alpha=0.3)
 
-    # 4. Stability analysis
+    # 4. Energy evolution (L2 norm) - moved to position [1, 0]
     ax4 = axes[1, 0]
-    dx = L / (nx - 1)
-    dt = T / nt
-    r = alpha * dt / (dx**2)
-
-    # Plot stability region
-    r_values = np.linspace(0, 1, 100)
-    stability_bound = 0.5 * np.ones_like(r_values)
-    ax4.plot(
-        r_values, stability_bound, "r--", linewidth=2, label="Stability limit (r = 0.5)"
-    )
-    ax4.axvline(x=r, color="blue", linewidth=2, label=f"Current r = {r:.4f}")
-    ax4.fill_between(
-        r_values, 0, stability_bound, alpha=0.3, color="green", label="Stable region"
-    )
-    ax4.set_xlabel("r = α·dt/dx²")
-    ax4.set_ylabel("Stability")
-    ax4.set_title("Stability Analysis")
-    ax4.legend()
-    ax4.grid(True, alpha=0.3)
-    ax4.set_xlim(0, 1)
-    ax4.set_ylim(0, 1)
-
-    # 5. Energy evolution (L2 norm)
-    ax5 = axes[1, 1]
     energy = np.array([np.trapz(u[:, n] ** 2, x) for n in range(nt + 1)])
-    ax5.plot(t, energy, "b-", linewidth=2)
-    ax5.set_xlabel("Time (t)")
-    ax5.set_ylabel("Energy (∫u²dx)")
-    ax5.set_title("Energy Evolution")
-    ax5.grid(True, alpha=0.3)
+    ax4.plot(t, energy, "b-", linewidth=2)
+    ax4.set_xlabel("Time (t)")
+    ax4.set_ylabel("Energy (∫u²dx)")
+    ax4.set_title("Energy Evolution")
+    ax4.grid(True, alpha=0.3)
 
-    # 6. Maximum temperature evolution
-    ax6 = axes[1, 2]
+    # 5. Maximum temperature evolution - moved to position [1, 1]
+    ax5 = axes[1, 1]
     max_temp = np.array([np.max(u[:, n]) for n in range(nt + 1)])
     min_temp = np.array([np.min(u[:, n]) for n in range(nt + 1)])
-    ax6.plot(t, max_temp, "r-", linewidth=2, label="Maximum")
-    ax6.plot(t, min_temp, "b-", linewidth=2, label="Minimum")
-    ax6.set_xlabel("Time (t)")
-    ax6.set_ylabel("Temperature")
-    ax6.set_title("Temperature Extremes")
-    ax6.legend()
-    ax6.grid(True, alpha=0.3)
+    ax5.plot(t, max_temp, "r-", linewidth=2, label="Maximum")
+    ax5.plot(t, min_temp, "b-", linewidth=2, label="Minimum")
+    ax5.set_xlabel("Time (t)")
+    ax5.set_ylabel("Temperature")
+    ax5.set_title("Temperature Extremes")
+    ax5.legend()
+    ax5.grid(True, alpha=0.3)
+
+    # 6. Remove the unused subplot [1, 2]
+    axes[1, 2].remove()
 
     plt.tight_layout()
     plt.savefig("heat_equation_analysis.png", dpi=300, bbox_inches="tight")
@@ -1143,8 +1612,19 @@ if __name__ == "__main__":
         output_filename="poisson_gauss_seidel.gif",
     )
 
-    # Create stencil animation
+    # Create stencil animations
     create_grid_update_animation(21, 21, "stencil_animation.gif")
+
+    # Create heat equation stencil animation (left-to-right, then time advance)
+    create_heat_stencil_animation(
+        alpha=0.01,
+        L=1.0,
+        T=1.0,  # Changed from 0.1 to 1.0
+        nx=21,
+        nt=10,
+        initial_condition=initial_gaussian,
+        output_filename="heat_stencil_march.gif",
+    )
 
     # Plot comprehensive results
     plot_poisson_results(source_function, boundary_zero, Lx, Ly, nx, ny)
@@ -1156,5 +1636,6 @@ if __name__ == "__main__":
     print("- poisson_jacobi.gif")
     print("- poisson_gauss_seidel.gif")
     print("- stencil_animation.gif")
+    print("- heat_stencil_march.gif")
     print("- heat_equation_analysis.png")
     print("- poisson_equation_analysis.png")
