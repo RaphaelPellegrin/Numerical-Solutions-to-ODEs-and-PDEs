@@ -177,14 +177,18 @@ Demonstrates Jacobi method convergence with consistent colorbar scaling.
 
 Shows faster convergence of Gauss-Seidel compared to Jacobi method.
 
-### 5-Point Stencil Animation
+### Enhanced 2D Poisson Stencil Animation
 ![Stencil Animation](stencil_animation.gif)
 
 **Ultra-detailed visualization** showing:
-- Point-by-point stencil movement (1M+ iterations)
-- Real-time solution evolution with color-coded background
-- Numerical values and calculations for each update
-- Complete convergence from initial guess to final solution
+- **20 complete sweeps** of Gauss-Seidel iteration
+- **Visited points turn blue** as algorithm progresses  
+- **Left-to-right stencil movement** (proper traversal order)
+- **Mountain/hill solution shape** appearing as convergence progresses
+- **Real-time solution evolution** with color-coded background
+- **5-point stencil pattern** with lime connections to current point
+- **Enhanced legend** showing all point types and their meanings
+- **Complete convergence** from initial guess to final solution
 
 ## 📊 PDE Analysis Plots
 
