@@ -568,9 +568,10 @@ def create_method_animation_gif(
     max_steps: int,
     output_filename: str,
 ) -> None:
-    """Creates an animated GIF showing the evolution of a numerical method with slope visualization.
+    """Creates an enhanced animated GIF showing the evolution of a numerical method with method comparison.
 
-    Shows slope estimates, tangent lines, and step arrows for each method.
+    Shows slope estimates, tangent lines, and step arrows for the current method,
+    plus comparison arrows for all other methods (Forward Euler, Backward Euler, RK4, Trapezoidal).
 
     Args:
         method_name: Name of the method ('Forward Euler', 'Backward Euler', 'Trapezoidal', 'RK4')
@@ -597,6 +598,27 @@ def create_method_animation_gif(
 
     # Limit to max_steps
     n_frames = min(max_steps, len(t_full))
+
+    def calculate_next_point(
+        t_curr: float, y_curr: float, method: str
+    ) -> tuple[float, float]:
+        """Calculate the next point for a given method."""
+        if method == "Forward Euler":
+            y_next = y_curr + h * lambda_val * y_curr
+        elif method == "Backward Euler":
+            y_next = y_curr / (1 - h * lambda_val)
+        elif method == "Trapezoidal":
+            y_next = y_curr * (1 + h * lambda_val / 2) / (1 - h * lambda_val / 2)
+        elif method == "RK4":
+            k1 = lambda_val * y_curr
+            k2 = lambda_val * (y_curr + h * k1 / 2)
+            k3 = lambda_val * (y_curr + h * k2 / 2)
+            k4 = lambda_val * (y_curr + h * k3)
+            y_next = y_curr + h * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+        return t_curr + h, y_next
 
     def calculate_slopes(t_curr: float, y_curr: float, method: str) -> dict:
         """Calculate slopes for visualization based on method."""
@@ -646,7 +668,12 @@ def create_method_animation_gif(
     # Create frames
     frames = []
     for i in range(1, n_frames + 1):
-        fig, ax = plt.subplots(figsize=(12, 8))
+        fig = plt.figure(figsize=(12, 10))
+
+        # Create subplot layout: plot on top, text box below
+        ax = plt.subplot(2, 1, 1)  # Top plot
+        ax_text = plt.subplot(2, 1, 2)  # Bottom text area
+        ax_text.axis("off")  # Turn off axis for text area
 
         # Plot true solution
         t_plot = np.linspace(t_span[0], t_span[1], 1000)
@@ -674,7 +701,7 @@ def create_method_animation_gif(
             # Calculate slopes for current method
             slopes = calculate_slopes(t_curr, y_curr, method_name)
 
-            # Draw slope line (tangent line)
+            # Draw slope line (tangent line) for current method
             line_length = h * 1.5  # Extend line a bit beyond the step
             t_line = np.array([t_curr - line_length / 2, t_curr + line_length / 2])
             y_line = y_curr + slopes["method"] * (t_line - t_curr)
@@ -682,14 +709,44 @@ def create_method_animation_gif(
                 t_line, y_line, "g-", linewidth=3, alpha=0.8, label="Slope estimate"
             )
 
-            # Draw step arrow
-            arrow_alpha = 0.5 if method_name == "RK4" else 1.0
-            ax.annotate(
-                "",
-                xy=(t_next, y_next),
-                xytext=(t_curr, y_curr),
-                arrowprops=dict(arrowstyle="->", lw=2, color="red", alpha=arrow_alpha),
-            )
+            # Draw arrows for ALL methods
+            all_methods = ["Forward Euler", "Backward Euler", "RK4", "Trapezoidal"]
+            method_colors = {
+                "Forward Euler": "blue",
+                "Backward Euler": "orange",
+                "RK4": "purple",
+                "Trapezoidal": "brown",
+            }
+
+            for method in all_methods:
+                t_method_next, y_method_next = calculate_next_point(
+                    t_curr, y_curr, method
+                )
+
+                if method == method_name:
+                    # Current method: solid green arrow
+                    ax.annotate(
+                        "",
+                        xy=(t_method_next, y_method_next),
+                        xytext=(t_curr, y_curr),
+                        arrowprops=dict(
+                            arrowstyle="->", lw=3, color="green", alpha=1.0
+                        ),
+                    )
+                else:
+                    # Other methods: dashed colored arrows
+                    ax.annotate(
+                        "",
+                        xy=(t_method_next, y_method_next),
+                        xytext=(t_curr, y_curr),
+                        arrowprops=dict(
+                            arrowstyle="->",
+                            lw=2,
+                            color=method_colors[method],
+                            alpha=0.6,
+                            linestyle="dashed",
+                        ),
+                    )
 
             # For RK4, show intermediate slopes with reduced alpha
             if method_name == "RK4":
@@ -724,39 +781,114 @@ def create_method_animation_gif(
                 # Mark intermediate points
                 ax.plot(t_mid, y_mid, "o", color="orange", markersize=6, alpha=0.7)
 
-            # Add information box with slope calculations
-            info_text = f"Step {i}: t = {t_curr:.3f}, y = {y_curr:.3f}\n"
-            info_text += f"h = {h:.3f}\n"
+            # Add enhanced information box with larger timestamp and method comparison
+            info_text = f"STEP {i}: t = {t_curr:.3f}, y = {y_curr:.3f}\n"
+            info_text += f"h = {h:.3f}\n\n"
+            info_text += f"CURRENT METHOD: {method_name}\n"
             info_text += f"{slopes['description']}\n"
-            info_text += f"Next point: y_{{n+1}} = {y_next:.3f}"
+            info_text += f"Next point: y_{{n+1}} = {y_next:.3f}\n\n"
+            info_text += "METHOD COMPARISON:\n"
 
-            # Position the text box
-            ax.text(
-                0.02,
-                0.98,
+            # Show next points for all methods
+            for method in all_methods:
+                t_comp_next, y_comp_next = calculate_next_point(t_curr, y_curr, method)
+                color_name = method_colors[method] if method != method_name else "GREEN"
+                style = "SOLID" if method == method_name else "DASHED"
+                info_text += f"• {method}: {y_comp_next:.3f} ({color_name}, {style})\n"
+
+            # Position the text box in the bottom area
+            ax_text.text(
+                0.05,
+                0.95,
                 info_text,
-                transform=ax.transAxes,
-                fontsize=9,
+                transform=ax_text.transAxes,
+                fontsize=12,  # Increased for better readability
                 verticalalignment="top",
-                bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.8),
+                fontfamily="monospace",
+                bbox=dict(boxstyle="round,pad=0.8", facecolor="lightcyan", alpha=0.9),
             )
 
-        # Highlight current point
+        # Highlight current point (no green background, just a prominent marker)
+        ax.plot(
+            t_curr,
+            y_curr,
+            "ko",  # Black center
+            markersize=12,
+            markeredgecolor="white",
+            markeredgewidth=3,
+            zorder=10,
+        )
+        # Add a red ring around it
         ax.plot(
             t_curr,
             y_curr,
             "ro",
-            markersize=10,
-            markeredgecolor="black",
+            markersize=8,
+            markerfacecolor="none",
+            markeredgecolor="red",
             markeredgewidth=2,
+            zorder=11,
         )
 
         ax.set_xlabel("Time")
         ax.set_ylabel("y(t)")
         ax.set_title(
-            f"{method_name} Evolution with Slope Visualization (Step {i}/{n_frames-1})"
+            f"{method_name} Evolution with Method Comparison (Step {i}/{n_frames-1})",
+            fontsize=14,
         )
-        ax.legend(loc="upper right")
+        # Create custom legend including method arrows
+        legend_elements = ax.get_legend_handles_labels()[0]
+        legend_labels = ax.get_legend_handles_labels()[1]
+
+        # Add method arrow indicators to legend
+        if i < len(t_full):
+            from matplotlib.lines import Line2D
+
+            legend_elements.extend(
+                [
+                    Line2D(
+                        [0], [0], color="green", lw=3, label=f"{method_name} (current)"
+                    ),
+                    Line2D(
+                        [0],
+                        [0],
+                        color="blue",
+                        lw=2,
+                        linestyle="--",
+                        alpha=0.6,
+                        label="Forward Euler",
+                    ),
+                    Line2D(
+                        [0],
+                        [0],
+                        color="orange",
+                        lw=2,
+                        linestyle="--",
+                        alpha=0.6,
+                        label="Backward Euler",
+                    ),
+                    Line2D(
+                        [0],
+                        [0],
+                        color="purple",
+                        lw=2,
+                        linestyle="--",
+                        alpha=0.6,
+                        label="RK4",
+                    ),
+                    Line2D(
+                        [0],
+                        [0],
+                        color="brown",
+                        lw=2,
+                        linestyle="--",
+                        alpha=0.6,
+                        label="Trapezoidal",
+                    ),
+                ]
+            )
+
+        ax.legend(handles=legend_elements, loc="upper right", fontsize=9)
         ax.grid(True, alpha=0.3)
         ax.set_xlim(t_span)
 
@@ -806,8 +938,11 @@ if __name__ == "__main__":
     h_values = np.logspace(-3, -1, 21)  # From 0.001 to 0.1
     plot_interactive_solutions(lambda_vals.tolist(), h_values.tolist(), y0, t_span)
 
-    # Create animation GIFs for each method
+    # Create animation GIFs for each method with larger time step for better slope visualization
+    h_animation = 0.5  # Much larger time step to show slope differences clearly
     methods = ["Forward Euler", "Backward Euler", "Trapezoidal", "RK4"]
     for method in methods:
         filename = f"{method.lower().replace(' ', '_')}_animation.gif"
-        create_method_animation_gif(method, lambda_val, y0, t_span, h, 50, filename)
+        create_method_animation_gif(
+            method, lambda_val, y0, t_span, h_animation, 20, filename
+        )
