@@ -113,13 +113,155 @@ This framework provides a foundation for:
 - **Method selection** (choosing appropriate schemes for different problems)
 - **Educational visualization** (understanding numerical method behavior)
 
-## Future Extensions
-
-- Implementation of higher-order methods (RK45, multistep methods)
-- Extension to systems of ODEs
-- PDE solvers using finite difference methods
-- Adaptive time-stepping algorithms
-
 ---
 
-*This project demonstrates the fundamental principles of numerical analysis applied to differential equations, with emphasis on stability, accuracy, and computational efficiency.*
+# Numerical Solutions to PDEs
+
+A comprehensive implementation of finite difference methods for solving partial differential equations (PDEs), featuring the **1D Heat Equation** and **2D Poisson Equation** with advanced visualizations.
+
+## PDE Problems Solved
+
+### 1. 1D Heat Equation (Parabolic PDE)
+**∂u/∂t = α ∂²u/∂x²** on domain [0,L] × [0,T]
+
+- **Physical meaning**: Heat diffusion in a 1D rod
+- **Method**: Explicit finite differences (Forward Euler in time)
+- **Stability**: Conditionally stable (r = α·Δt/Δx² ≤ 0.5)
+- **Boundary conditions**: Dirichlet (fixed temperature at ends)
+
+### 2. 2D Poisson Equation (Elliptic PDE)
+**∇²u = ∂²u/∂x² + ∂²u/∂y² = f(x,y)** on domain [0,Lx] × [0,Ly]
+
+- **Physical meaning**: Steady-state heat distribution, electrostatic potential
+- **Methods**: Jacobi and Gauss-Seidel iterative solvers
+- **Convergence**: Jacobi slower but parallelizable, Gauss-Seidel faster convergence
+- **Boundary conditions**: Dirichlet (u = 0 on all boundaries)
+
+## PDE Numerical Techniques
+
+### Heat Equation: Explicit Finite Differences
+```
+u[i,n+1] = u[i,n] + r*(u[i+1,n] - 2*u[i,n] + u[i-1,n])
+```
+- **Time marching**: Forward Euler
+- **Space discretization**: Central differences
+- **Stability constraint**: r ≤ 0.5
+
+### Poisson Equation: 5-Point Stencil
+```
+u[i,j] = (u[i+1,j] + u[i-1,j] + u[i,j+1] + u[i,j-1] - h²f[i,j]) / 4
+```
+- **Jacobi**: Use old values for all neighbors
+- **Gauss-Seidel**: Use updated values immediately
+- **Convergence**: Iterate until |u_new - u_old| < tolerance
+
+## 🎬 PDE Animations
+
+### Heat Equation Evolution
+![Heat Evolution](heat_evolution.gif)
+
+Shows temperature diffusion over time with Gaussian initial condition.
+
+### Heat Equation Lattice Construction
+![Heat Lattice](heat_lattice.gif)
+
+Visualizes the space-time grid construction showing computed (blue) vs uncomputed (grey) points.
+
+### Poisson Equation: Jacobi Iteration
+![Poisson Jacobi](poisson_jacobi.gif)
+
+Demonstrates Jacobi method convergence with consistent colorbar scaling.
+
+### Poisson Equation: Gauss-Seidel Iteration  
+![Poisson Gauss-Seidel](poisson_gauss_seidel.gif)
+
+Shows faster convergence of Gauss-Seidel compared to Jacobi method.
+
+### 5-Point Stencil Animation
+![Stencil Animation](stencil_animation.gif)
+
+**Ultra-detailed visualization** showing:
+- Point-by-point stencil movement (1M+ iterations)
+- Real-time solution evolution with color-coded background
+- Numerical values and calculations for each update
+- Complete convergence from initial guess to final solution
+
+## 📊 PDE Analysis Plots
+
+### Heat Equation Analysis
+![Heat Analysis](heat_equation_analysis.png)
+
+Comprehensive analysis showing:
+- **Space-time contour plot**: Temperature evolution
+- **Temperature profiles**: Solutions at different times
+- **Time evolution**: Temperature vs time at specific points
+- **Stability analysis**: r-parameter visualization
+- **Energy evolution**: L² norm over time
+- **Temperature extremes**: Maximum and minimum values
+
+### Poisson Equation Analysis
+![Poisson Analysis](poisson_equation_analysis.png)
+
+Detailed comparison featuring:
+- **Jacobi solution**: Contour plot with iteration count
+- **Gauss-Seidel solution**: Faster convergence visualization
+- **Method comparison**: Absolute difference between methods
+- **Convergence rates**: Residual evolution comparison
+- **Cross-sections**: 1D cuts through 2D solution
+- **3D surface plot**: Complete solution visualization
+
+## PDE Usage
+
+### Prerequisites
+```bash
+pip install numpy matplotlib pillow
+```
+
+### Running PDE Solvers
+```bash
+python numerical_pde.py
+```
+
+This generates:
+1. **Heat equation evolution GIF** (`heat_evolution.gif`)
+2. **Heat lattice construction GIF** (`heat_lattice.gif`)
+3. **Poisson Jacobi iteration GIF** (`poisson_jacobi.gif`)
+4. **Poisson Gauss-Seidel GIF** (`poisson_gauss_seidel.gif`)
+5. **5-point stencil animation** (`stencil_animation.gif`)
+6. **Heat equation analysis plot** (`heat_equation_analysis.png`)
+7. **Poisson equation analysis plot** (`poisson_equation_analysis.png`)
+
+### Key PDE Functions
+
+- `solve_heat_equation_1d()`: Explicit finite difference solver for heat equation
+- `solve_poisson_2d_jacobi()`: Jacobi iterative solver for Poisson equation
+- `solve_poisson_2d_gauss_seidel()`: Gauss-Seidel iterative solver
+- `create_heat_equation_gif()`: Animates heat diffusion process
+- `create_heat_lattice_animation()`: Shows space-time grid construction
+- `create_poisson_iteration_gif()`: Visualizes iterative convergence
+- `create_grid_update_animation()`: Ultra-detailed stencil movement animation
+- `plot_heat_results()`: Comprehensive heat equation analysis
+- `plot_poisson_results()`: Detailed Poisson equation comparison
+
+## Mathematical Background: PDEs
+
+### Heat Equation (Parabolic)
+- **Physical process**: Diffusion, heat conduction
+- **Time-dependent**: Evolution from initial condition
+- **Stability**: CFL condition r ≤ 0.5 for explicit schemes
+- **Smoothing effect**: Discontinuities are immediately smoothed
+
+### Poisson Equation (Elliptic)
+- **Physical process**: Steady-state phenomena, equilibrium
+- **Boundary value problem**: Solution determined by boundary conditions
+- **Iterative solution**: Requires iterative methods for large systems
+- **Convergence**: Jacobi O(h²) per iteration, Gauss-Seidel ~2x faster
+
+### Finite Difference Stencils
+- **Heat equation**: 3-point stencil in space, forward in time
+- **Poisson equation**: 5-point stencil (North, South, East, West, Center)
+- **Accuracy**: Second-order accurate in space
+- **Grid refinement**: Smaller h improves accuracy but increases computational cost
+
+
+
